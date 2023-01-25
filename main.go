@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
+	"static-upload/compute"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -97,21 +99,31 @@ func findBucketFiles(s3Client *s3.S3, bucket string) ([]string, error) {
 	return res, nil
 }
 
+func deleteFilesFromBucket(s3Client *s3.S3, bucket string, deletes []string) error {
+	for _, fileToDelete := range deletes {
+		_, err := s3Client.DeleteObject(&s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(fileToDelete)})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func copyLocalToBucket(s3Client *s3.S3, localDir string, bucket string, testOnly bool) {
 	localFiles, err := findAllFiles(localDir)
 	if err != nil {
 		fmt.Printf("Cannot read local files in %s: %v\n", localDir, err)
 		os.Exit(1)
 	}
-
-	dirLen := len(localDir) + 1
-	for _, file := range localFiles {
-		if testOnly {
-			fmt.Printf("L: %s\n", file[dirLen:])
-		}
-	}
+	sort.Strings(localFiles)
 
 	if testOnly {
+		dirLen := len(localDir) + 1
+		for _, file := range localFiles {
+			fmt.Printf("L: %s\n", file[dirLen:])
+		}
+
 		fmt.Printf("--------\n")
 	}
 
@@ -120,27 +132,35 @@ func copyLocalToBucket(s3Client *s3.S3, localDir string, bucket string, testOnly
 		fmt.Printf("Cannot read bucket files in %s: %v\n", bucket, err)
 		os.Exit(1)
 	}
+	sort.Strings(bucketFiles)
 
-	bucketLen := len(bucket) + 1
-	for _, file := range bucketFiles {
-		if testOnly {
+	if testOnly {
+		bucketLen := len(bucket) + 1
+		for _, file := range bucketFiles {
 			fmt.Printf("B: %s\n", file[bucketLen:])
 		}
+	}
+
+	deletes := compute.Deletes(localFiles, bucketFiles)
+	if testOnly {
+		for _, file := range deletes {
+			fmt.Printf("Delete: %s\n", file)
+		}
+	}
+
+	if len(deletes) > 0 {
+		deleteFilesFromBucket(s3Client, bucket, deletes)
 	}
 }
 
 func main() {
-	// create an app
 	app := cli.App("static-uploader", "Copy files from a local directory to an S3-type bucket")
 	app.Spec = "[-t] LOCAL_DIRECTORY BUCKET"
 
 	var (
-		// declare the -r flag as a boolean flag
 		testOnly = app.BoolOpt("t test", false, "Don't copy the files, just show what would be done")
-		// declare the SRC argument as a multi-string argument
 		localDir = app.StringArg("LOCAL_DIRECTORY", "", "Local directory to copy from")
-		// declare the DST argument as a single string (string slice) arguments
-		bucket = app.StringArg("BUCKET", "", "Destination bucket to copy files to")
+		bucket   = app.StringArg("BUCKET", "", "Destination bucket to copy files to")
 	)
 
 	// Specify the action to execute when the app is invoked correctly
