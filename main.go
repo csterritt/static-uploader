@@ -118,10 +118,20 @@ func uploadFilesToBucket(s3Client *s3.S3, bucket string, localDir string, localF
 			return err
 		}
 
+		contentType := "text"
+		if strings.HasSuffix(localFile, ".html") {
+			contentType = "text/html"
+		} else if strings.HasSuffix(localFile, ".js") {
+			contentType = "text/javascript"
+		} else if strings.HasSuffix(localFile, ".css") {
+			contentType = "text/css"
+		}
+
 		_, err = s3Client.PutObject(&s3.PutObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String(localFile),
-			Body:   strings.NewReader(string(contents)),
+			Bucket:      aws.String(bucket),
+			Key:         aws.String(localFile),
+			Body:        strings.NewReader(string(contents)),
+			ContentType: aws.String(contentType),
 		})
 		if err != nil {
 			return err
