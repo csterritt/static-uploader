@@ -12,7 +12,7 @@ import (
 	"github.com/jawher/mow.cli"
 )
 
-var neededEnvVars = []string{"STORAGE_KEY_ID", "STORAGE_KEY_CONTENT", "STORAGE_BUCKET_NAME", "STORAGE_BUCKET_ENDPOINT"}
+var neededEnvVars = []string{"STORAGE_KEY_ID", "STORAGE_KEY_CONTENT", "STORAGE_BUCKET_ENDPOINT"}
 
 func isNotDir(dir string) bool {
 	fileInfo, err := os.Stat(dir)
