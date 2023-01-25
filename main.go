@@ -11,6 +11,31 @@ import (
 
 var neededVars = []string{"STORAGE_KEY_ID", "STORAGE_KEY_CONTENT", "STORAGE_BUCKET_NAME", "STORAGE_BUCKET_ENDPOINT"}
 
+func isNotDir(dir string) bool {
+	file, err := os.Open(dir)
+	if err != nil {
+		fmt.Printf("Cannot find directory %s: %s\n", dir, err)
+		return true
+	}
+
+	defer file.Close()
+
+	// This returns an *os.FileInfo type
+	fileInfo, err := file.Stat()
+	if err != nil {
+		fmt.Printf("Cannot stat directory %s: %s\n", dir, err)
+		return true
+	}
+
+	// IsDir is short for fileInfo.Mode().IsDir()
+	if !fileInfo.IsDir() {
+		fmt.Printf("File %s is not a directory\n", dir)
+		return true
+	}
+
+	return false
+}
+
 func verifyEnvironment() {
 	fail := false
 	for _, name := range neededVars {
@@ -22,6 +47,11 @@ func verifyEnvironment() {
 	}
 
 	if fail {
+		os.Exit(1)
+	}
+
+	if len(os.Args) != 2 || isNotDir(os.Args[1]) {
+		fmt.Printf("Usage: static-upload distribution-directory\n")
 		os.Exit(1)
 	}
 }
