@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
 	"static-upload/compute"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -110,18 +110,43 @@ func deleteFilesFromBucket(s3Client *s3.S3, bucket string, deletes []string) err
 	return nil
 }
 
+func uploadFilesToBucket(s3Client *s3.S3, bucket string, localFiles []string) error {
+	for _, localFile := range localFiles {
+		_, err := s3Client.PutObject(&s3.PutObjectInput{Bucket: aws.String(bucket), Key: aws.String(localFile)})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func removeLocalDirPrefix(localDir string, localFiles []string) []string {
+	res := make([]string, len(localFiles))
+	nameLen := len(localDir) + 1
+	for index, file := range localFiles {
+		spot := strings.Index(file, localDir)
+		if spot > -1 {
+			res[index] = localFiles[index][spot+nameLen:]
+		} else {
+			res[index] = localFiles[index]
+		}
+	}
+
+	return res
+}
+
 func copyLocalToBucket(s3Client *s3.S3, localDir string, bucket string, testOnly bool) {
 	localFiles, err := findAllFiles(localDir)
 	if err != nil {
 		fmt.Printf("Cannot read local files in %s: %v\n", localDir, err)
 		os.Exit(1)
 	}
-	sort.Strings(localFiles)
+	localFiles = removeLocalDirPrefix(localDir, localFiles)
 
 	if testOnly {
-		dirLen := len(localDir) + 1
 		for _, file := range localFiles {
-			fmt.Printf("L: %s\n", file[dirLen:])
+			fmt.Printf("L: %s\n", file)
 		}
 
 		fmt.Printf("--------\n")
@@ -132,12 +157,11 @@ func copyLocalToBucket(s3Client *s3.S3, localDir string, bucket string, testOnly
 		fmt.Printf("Cannot read bucket files in %s: %v\n", bucket, err)
 		os.Exit(1)
 	}
-	sort.Strings(bucketFiles)
+	fmt.Printf("bucketFiles: %#v\n", bucketFiles)
 
 	if testOnly {
-		bucketLen := len(bucket) + 1
 		for _, file := range bucketFiles {
-			fmt.Printf("B: %s\n", file[bucketLen:])
+			fmt.Printf("B: %s\n", file)
 		}
 	}
 
@@ -148,8 +172,20 @@ func copyLocalToBucket(s3Client *s3.S3, localDir string, bucket string, testOnly
 		}
 	}
 
-	if len(deletes) > 0 {
-		deleteFilesFromBucket(s3Client, bucket, deletes)
+	if len(deletes) > 0 && !testOnly {
+		err := deleteFilesFromBucket(s3Client, bucket, deletes)
+		if err != nil {
+			fmt.Printf("Cannot delete at least one bucket file: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	if len(localFiles) > 0 && !testOnly {
+		err := uploadFilesToBucket(s3Client, bucket, localFiles)
+		if err != nil {
+			fmt.Printf("Cannot upload at least one bucket file: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
 
