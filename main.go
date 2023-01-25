@@ -157,7 +157,6 @@ func copyLocalToBucket(s3Client *s3.S3, localDir string, bucket string, testOnly
 		fmt.Printf("Cannot read bucket files in %s: %v\n", bucket, err)
 		os.Exit(1)
 	}
-	fmt.Printf("bucketFiles: %#v\n", bucketFiles)
 
 	if testOnly {
 		for _, file := range bucketFiles {
