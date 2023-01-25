@@ -110,9 +110,19 @@ func deleteFilesFromBucket(s3Client *s3.S3, bucket string, deletes []string) err
 	return nil
 }
 
-func uploadFilesToBucket(s3Client *s3.S3, bucket string, localFiles []string) error {
+func uploadFilesToBucket(s3Client *s3.S3, bucket string, localDir string, localFiles []string) error {
 	for _, localFile := range localFiles {
-		_, err := s3Client.PutObject(&s3.PutObjectInput{Bucket: aws.String(bucket), Key: aws.String(localFile)})
+		fullFile := localDir + "/" + localFile
+		contents, err := os.ReadFile(fullFile)
+		if err != nil {
+			return err
+		}
+
+		_, err = s3Client.PutObject(&s3.PutObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(localFile),
+			Body:   strings.NewReader(string(contents)),
+		})
 		if err != nil {
 			return err
 		}
@@ -180,7 +190,7 @@ func copyLocalToBucket(s3Client *s3.S3, localDir string, bucket string, testOnly
 	}
 
 	if len(localFiles) > 0 && !testOnly {
-		err := uploadFilesToBucket(s3Client, bucket, localFiles)
+		err := uploadFilesToBucket(s3Client, bucket, localDir, localFiles)
 		if err != nil {
 			fmt.Printf("Cannot upload at least one bucket file: %v\n", err)
 			os.Exit(1)
