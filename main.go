@@ -12,16 +12,8 @@ import (
 var neededVars = []string{"STORAGE_KEY_ID", "STORAGE_KEY_CONTENT", "STORAGE_BUCKET_NAME", "STORAGE_BUCKET_ENDPOINT"}
 
 func isNotDir(dir string) bool {
-	file, err := os.Open(dir)
-	if err != nil {
-		fmt.Printf("Cannot find directory %s: %s\n", dir, err)
-		return true
-	}
-
-	defer file.Close()
-
 	// This returns an *os.FileInfo type
-	fileInfo, err := file.Stat()
+	fileInfo, err := os.Stat(dir)
 	if err != nil {
 		fmt.Printf("Cannot stat directory %s: %s\n", dir, err)
 		return true
