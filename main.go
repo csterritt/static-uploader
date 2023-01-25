@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/jawher/mow.cli"
 )
 
 var neededEnvVars = []string{"STORAGE_KEY_ID", "STORAGE_KEY_CONTENT", "STORAGE_BUCKET_NAME", "STORAGE_BUCKET_ENDPOINT"}
@@ -20,31 +22,21 @@ func isNotDir(dir string) bool {
 	}
 
 	if !fileInfo.IsDir() {
-		fmt.Printf("File %s is not a directory\n", dir)
 		return true
 	}
 
 	return false
 }
 
-func verifyEnvironment() {
-	fail := false
+func verifyEnvironment() error {
 	for _, name := range neededEnvVars {
 		val := os.Getenv(name)
 		if val == "" {
-			fail = true
-			fmt.Printf("Error: environmental variable %s is not set\n", name)
+			return errors.New(fmt.Sprintf("Error: environmental variable %s is not set\n", name))
 		}
 	}
 
-	if fail {
-		os.Exit(1)
-	}
-
-	if len(os.Args) != 2 || isNotDir(os.Args[1]) {
-		fmt.Printf("Usage: static-upload distribution-directory\n")
-		os.Exit(1)
-	}
+	return nil
 }
 
 func findAllFiles(localDir string) ([]string, error) {
@@ -105,7 +97,7 @@ func findBucketFiles(s3Client *s3.S3, bucket string) ([]string, error) {
 	return res, nil
 }
 
-func copyLocalToBucket(s3Client *s3.S3, localDir string, bucket string) {
+func copyLocalToBucket(s3Client *s3.S3, localDir string, bucket string, testOnly bool) {
 	localFiles, err := findAllFiles(localDir)
 	if err != nil {
 		fmt.Printf("Cannot read local files in %s: %v\n", localDir, err)
@@ -114,9 +106,14 @@ func copyLocalToBucket(s3Client *s3.S3, localDir string, bucket string) {
 
 	dirLen := len(localDir) + 1
 	for _, file := range localFiles {
-		fmt.Printf("L: %s\n", file[dirLen:])
+		if testOnly {
+			fmt.Printf("L: %s\n", file[dirLen:])
+		}
 	}
-	fmt.Printf("--------\n")
+
+	if testOnly {
+		fmt.Printf("--------\n")
+	}
 
 	bucketFiles, err := findBucketFiles(s3Client, bucket)
 	if err != nil {
@@ -126,23 +123,54 @@ func copyLocalToBucket(s3Client *s3.S3, localDir string, bucket string) {
 
 	bucketLen := len(bucket) + 1
 	for _, file := range bucketFiles {
-		fmt.Printf("B: %s\n", file[bucketLen:])
+		if testOnly {
+			fmt.Printf("B: %s\n", file[bucketLen:])
+		}
 	}
 }
 
 func main() {
-	verifyEnvironment()
+	// create an app
+	app := cli.App("static-uploader", "Copy files from a local directory to an S3-type bucket")
+	app.Spec = "[-t] LOCAL_DIRECTORY BUCKET"
 
-	s3Client, err := getS3Client()
-	if err != nil {
-		fmt.Printf("Cannot create S3 client: %v\n", err)
-		os.Exit(1)
+	var (
+		// declare the -r flag as a boolean flag
+		testOnly = app.BoolOpt("t test", false, "Don't copy the files, just show what would be done")
+		// declare the SRC argument as a multi-string argument
+		localDir = app.StringArg("LOCAL_DIRECTORY", "", "Local directory to copy from")
+		// declare the DST argument as a single string (string slice) arguments
+		bucket = app.StringArg("BUCKET", "", "Destination bucket to copy files to")
+	)
+
+	// Specify the action to execute when the app is invoked correctly
+	app.Action = func() {
+		err := verifyEnvironment()
+		if err != nil {
+			fmt.Printf("Got error %v\n", err)
+			os.Exit(1)
+		}
+
+		if isNotDir(*localDir) {
+			fmt.Printf("Error: %s is not a directory.\n", *localDir)
+			os.Exit(1)
+		}
+
+		s3Client, err := getS3Client()
+		if err != nil {
+			fmt.Printf("Cannot create S3 client: %v\n", err)
+			os.Exit(1)
+		}
+
+		copyLocalToBucket(s3Client, *localDir, *bucket, *testOnly)
+
+		fmt.Printf("Done!\n")
 	}
 
-	bucket := os.Getenv("STORAGE_BUCKET_NAME")
-	localDir := os.Args[1]
-
-	copyLocalToBucket(s3Client, localDir, bucket)
-
-	fmt.Printf("Done!\n")
+	// Invoke the app passing in os.Args
+	err := app.Run(os.Args)
+	if err != nil {
+		fmt.Printf("Got error %v\n", err)
+		os.Exit(1)
+	}
 }
