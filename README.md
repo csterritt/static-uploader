@@ -2,7 +2,7 @@
 
 This program takes a directory and a bucket (in an S3-compatible storage facility)
 and uploads the files below that directory to the bucket. Any files that are found
-in the bucket whose name does not match a file under the directory is removed. Any
+in the bucket whose name does not match a file under the directory are removed. Any
 files that are the same name from the last upload are replaced with the (possibly
 new) file.
 
